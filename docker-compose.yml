@@ -1,0 +1,16 @@
+services:
+  can-publisher:
+    build: ./ingestion
+    network_mode: host
+    restart: unless-stopped
+
+  postgres:
+    build: ./postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
