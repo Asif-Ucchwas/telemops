@@ -10,7 +10,11 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 COPY can_publisher.py .
 COPY verify_data_flow.py .
+COPY ingest.py .
+COPY load_test.py .
+COPY vehicle.dbc .
 
 ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "can_publisher.py"]

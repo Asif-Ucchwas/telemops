@@ -4,6 +4,14 @@ services:
     network_mode: host
     restart: unless-stopped
 
+  ingestor:
+    build: ./ingestion
+    command: python ingest.py
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
   postgres:
     build: ./postgres
     ports:
