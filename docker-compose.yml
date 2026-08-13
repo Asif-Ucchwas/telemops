@@ -20,5 +20,19 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
+  grafana:
+    build: ./grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: telemops_admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
+  grafana-data:

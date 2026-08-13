@@ -61,3 +61,29 @@
 - Ramped through 10Hz -> 50Hz -> 200Hz -> 1000Hz -> 5000Hz (all measured by actual achieved rate, not requested rate, since `load_test.py` sends 2 frames per loop iteration): zero frame loss at every stage up to ~5,195 real frames/sec, with the batching layer holding up cleanly throughout.
 - Found a genuine breaking point at ~9,700+ frames/sec: significant frame loss (26-37% across two runs). Isolated the root cause with an independent measurement — ran `candump -c` on the bus at the same time as the load test, and its count matched `load_test.py`'s reported send count exactly, proving every frame genuinely reached `vcan0`. The loss is therefore confirmed to happen inside `ingest.py`'s own single-threaded, blocking `bus.recv()` loop (the kernel's SocketCAN receive buffer overflows because the process isn't calling `recv()` fast enough while it's busy decoding/buffering/occasionally flushing) - not a Postgres or batching-layer problem, since the batching logic never lost anything it actually received.
 - See BENCHMARKS.md for the full staged results table and the honest conclusion on where the ceiling is and why.
+
+## Stage 3 — Dashboards
+
+### Task 9: Grafana + Postgres connection
+
+- Attempted to pull the official `grafana/grafana:11.2.0` image and hit the same Docker Hub CDN timeout pattern diagnosed in Stage 1 (`registry-1.docker.io`, TLS handshake timeout on large layers). Applied the same known workaround: built a custom Grafana image from `debian:bookworm-slim` + Grafana's own official APT repository (`apt.grafana.com`, a different host than Docker Hub's CDN) rather than re-diagnosing from scratch. Second time this exact fix has been needed and applied cleanly.
+- Grafana runs on Compose's default private network (not `network_mode: host`, unlike the publisher/ingestor) since it only needs to reach Postgres by service name (`postgres:5432`), not `vcan0`.
+- Verified the data source connection with a live query against `can_signals` via Grafana's Explore view before building any dashboard panels.
+
+### Task 10: Live dashboard panels
+
+- Built "TelemOps Live Telemetry" dashboard with three live time-series panels (Vehicle Speed, Engine RPM, Battery Temp), each querying `can_signals` directly with Grafana's `$__timeFilter()` macro so panels follow the dashboard's selected time range dynamically.
+- Set dashboard auto-refresh to 10s so panels genuinely update live rather than only on manual refresh.
+- Screenshot: `docs/screenshots/dashboard-live-panels.png`.
+
+### Task 11: Alerting
+
+- Added a Grafana alert rule ("Battery Temp High") querying the most recent BatteryTemp reading, firing when it exceeds 60C.
+- The original battery_temp simulation (25 + 5*sin(t/200), gentle 20-30C drift) never approached a realistic danger threshold, so a literal alert would never fire — a weak, untested demo. Deliberately widened the simulated swing to `35 + 35*sin(t/60)` (roughly 0-70C, ~3 minute cycle) specifically so the alert could be observed actually firing against real data, not just configured-but-unverified. This is a documented, intentional trade-off (realism sacrificed for demonstrability), not an oversight - the wider swing is clearly unrealistic for a real battery and is kept for portfolio/demo purposes.
+- Confirmed the alert genuinely transitions between Normal and Firing states as BatteryTemp crosses 60C in real time - firing was directly observed during testing.
+- Screenshot: `docs/screenshots/alert-battery-temp.png` (shows the alert rule's query, condition, and evaluation state).
+
+### Task 12: Documentation
+
+- Captured and committed dashboard and alert-rule screenshots (see above) to `docs/screenshots/`.
+- Fixed panel titles that had reverted to Grafana's default "New panel" label after initial creation - final panel titles are "Vehicle Speed (km/h)", "Engine RPM", "Battery Temp (°C)".

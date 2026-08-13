@@ -20,7 +20,7 @@ def main():
         while True:
             speed = round(60 + 40 * math.sin(t / 20))
             rpm = round(1500 + speed * 30)
-            battery_temp = round(25 + 5 * math.sin(t / 200))
+            battery_temp = round(35 + 35 * math.sin(t / 60))
 
             vs_data = vehicle_status.encode({"VehicleSpeed": speed})
             es_data = engine_status.encode({"EngineRPM": rpm, "BatteryTemp": battery_temp})
