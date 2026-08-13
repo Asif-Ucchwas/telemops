@@ -1,3 +1,4 @@
+import os
 import can
 import cantools
 import psycopg2
@@ -13,7 +14,7 @@ FLUSH_INTERVAL = 2.0
 db = cantools.database.load_file(DBC_PATH)
 
 conn = psycopg2.connect(
-    host="localhost", port=5432,
+    host=os.environ.get("DB_HOST", "localhost"), port=int(os.environ.get("DB_PORT", 5432)),
     dbname="telemops", user="telemops", password="telemops_dev"
 )
 conn.autocommit = False

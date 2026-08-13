@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestor
+  template:
+    metadata:
+      labels:
+        app: ingestor
+    spec:
+      hostNetwork: true
+      containers:
+        - name: ingestor
+          image: telemops-ingestion:latest
+          imagePullPolicy: Never
+          command: ["python", "ingest.py"]
+          env:
+            - name: DB_HOST
+              value: "192.168.49.2"
+            - name: DB_PORT
+              value: "30432"

@@ -87,3 +87,29 @@
 
 - Captured and committed dashboard and alert-rule screenshots (see above) to `docs/screenshots/`.
 - Fixed panel titles that had reverted to Grafana's default "New panel" label after initial creation - final panel titles are "Vehicle Speed (km/h)", "Engine RPM", "Battery Temp (°C)".
+
+## Stage 4 — Orchestration (Kubernetes)
+
+### Task 13: Local cluster setup
+
+- Installed minikube (v1.38.1) with the Docker driver and a conservative resource allocation (`--memory=2200 --cpus=2`), after checking actual headroom first (WSL2 caps itself at ~half the host's 16GB RAM by default; confirmed ~6.6GB genuinely free before committing to minikube's footprint).
+- Installed `kubectl` directly (minikube doesn't bundle it).
+
+### Task 14: Converting Compose services to K8s manifests
+
+- Discovered minikube runs as its own Docker container with its own separate network namespace - `vcan0`, which exists on the WSL host, does not automatically exist inside minikube. Verified this directly via `minikube ssh` before assuming, then created `vcan0` a second time, inside minikube's own environment - a real, separate instance of the same gotcha first hit in Stage 1, now recurring one layer deeper.
+- Built images directly into minikube's own Docker daemon via `eval $(minikube docker-env)` rather than pulling from a registry, combined with `imagePullPolicy: Never` on every Deployment - this sidesteps the Docker Hub CDN issue entirely for K8s workloads, since nothing is ever pulled from Docker Hub inside the cluster.
+- Real networking distinction, found empirically rather than assumed: pods using `hostNetwork: true` (can-publisher, ingestor - both need host-level `vcan0` access) cannot reach other services via Kubernetes' internal Service DNS (`postgres:5432`), because `hostNetwork` bypasses the pod network entirely and uses the node's network directly instead. Fixed by exposing Postgres via a `NodePort` Service (fixed port 30432) and pointing `ingest.py` at `<minikube-ip>:30432` via new `DB_HOST`/`DB_PORT` environment variables (defaulting to `localhost:5432` so Docker Compose keeps working unchanged from the same codebase).
+- By contrast, confirmed Grafana - deployed *without* `hostNetwork`, since it never needs `vcan0` - connects cleanly via plain internal Service DNS (`postgres:5432`), no NodePort needed. This contrast is a good, precise illustration of when host networking trades away Kubernetes' normal service discovery, and when it doesn't.
+- Discovered the K8s-hosted Postgres is a genuinely separate Postgres instance from the Compose-hosted one (different PVC, different storage entirely) - had to recreate the `can_frames`/`can_signals` schema manually on the K8s instance before the ingestor could write to it.
+- A mid-session Windows update forced a full machine restart. Recovered cleanly: `vcan0` had to be recreated in both WSL and minikube again (expected, matches the established pattern), and both Compose (`restart: unless-stopped`) and K8s (`CrashLoopBackOff` on the `can-publisher`/`ingestor` pods, until `vcan0` existed again and the pods were manually deleted to break the backoff timer) needed a nudge to fully recover.
+- Found that minikube's node IP (`192.168.49.2`) is only reachable from inside WSL, not from the Windows browser directly - a distinct network layer from the simple container port-mapping Compose used. Fixed with `kubectl port-forward deploy/grafana 3001:3000`, which tunnels through `localhost` (which Windows *can* reach automatically into WSL) - the correct, general-purpose way to reach into a cluster from outside, documented here since it applies to any future K8s service, not just Grafana.
+
+### Task 15: Persistent storage
+
+- Added PersistentVolumeClaims for both Postgres (1Gi) and Grafana (500Mi), replacing Compose's named volumes.
+- Persistence was proven twice, not just assumed: once accidentally (the mid-session reboot - Postgres's pod restarted and all prior data was still present), and once deliberately (`kubectl delete pod -l app=postgres` on a running system, followed immediately by a query against the brand-new replacement pod, which correctly returned all 14,237 existing frames). The deliberate test is the more rigorous proof, since it isolates exactly what a PVC is supposed to guarantee - that pod deletion does not equal data loss - rather than relying on a coincidental recovery.
+
+### Task 16: End-to-end verification
+
+- Consolidated final check: all 4 pods (`postgres`, `can-publisher`, `ingestor`, `grafana`) running, both PVCs bound, fresh live data confirmed landing within the last minute via direct SQL query, and the ingestor's batching behavior (`oldest_lag` steady at ~2.0s) matching the same healthy pattern established back in Stage 2 - now proven to hold under Kubernetes, not just Docker Compose.

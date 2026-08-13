@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: can-publisher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: can-publisher
+  template:
+    metadata:
+      labels:
+        app: can-publisher
+    spec:
+      hostNetwork: true
+      containers:
+        - name: can-publisher
+          image: telemops-ingestion:latest
+          imagePullPolicy: Never
+          command: ["python", "can_publisher.py"]
