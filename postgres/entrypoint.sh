@@ -6,6 +6,7 @@ PG_BIN=/usr/lib/postgresql/$PG_VERSION/bin
 
 # Named volumes mount as root-owned by default; fix that before postgres tries to use it
 chown -R postgres:postgres "$PGDATA"
+chmod 700 "$PGDATA"
 
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
   echo "[entrypoint] Initializing new Postgres cluster in $PGDATA"

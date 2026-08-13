@@ -113,3 +113,28 @@
 ### Task 16: End-to-end verification
 
 - Consolidated final check: all 4 pods (`postgres`, `can-publisher`, `ingestor`, `grafana`) running, both PVCs bound, fresh live data confirmed landing within the last minute via direct SQL query, and the ingestor's batching behavior (`oldest_lag` steady at ~2.0s) matching the same healthy pattern established back in Stage 2 - now proven to hold under Kubernetes, not just Docker Compose.
+
+## Stage 5 — Infrastructure as Code (Terraform)
+
+### Task 17: Terraform setup
+
+- Installed Terraform via HashiCorp's official apt repository (not Ubuntu's default repos, which don't carry it).
+- Configured the `hashicorp/kubernetes` provider pointed at the same kubeconfig `kubectl` already uses (`~/.kube/config`), so Terraform manages the exact same minikube cluster used throughout Stage 4, not a separate one.
+
+### Task 18: Converting manifests to Terraform resources
+
+- Deleted the manually-applied `kubectl apply -f k8s/` resources first, so Terraform would own everything it manages from a clean slate rather than "adopting" resources it didn't create.
+- Rewrote all four services (Postgres, can-publisher, ingestor, Grafana) plus their PVCs and Services as Terraform `.tf` resources, mirroring the Stage 4 YAML manifests. Added `dns_policy = "ClusterFirstWithHostNet"` on the two `hostNetwork` pods explicitly - not present in the original YAML, but good practice, since `hostNetwork` pods silently default to node DNS otherwise, a subtle trap if cluster DNS is ever needed later.
+- **Real bug found and fixed:** `terraform apply` hung for 9+ minutes waiting on the Postgres Deployment, which was actually crash-looping. Root cause: minikube's hostpath PVC provisioner had reused the exact same on-disk path from an earlier, unrelated PVC that was never actually wiped when its Kubernetes object was deleted - so the "fresh" PVC started with stale files owned by unrelated OS users. The entrypoint's `chown` call ran correctly, but Postgres refused to start anyway with "invalid permissions" - because `chown` only fixes ownership, never permission bits, and the stale directory was `0777`. Postgres requires `0700`/`0750` regardless of ownership. Fixed by adding an explicit `chmod 700 "$PGDATA"` alongside the existing `chown` in `entrypoint.sh` - a real, previously-latent gap in the Stage 1 entrypoint script that a normal (non-Terraform, always-same-volume) workflow had never exposed.
+- **Second real issue:** after fixing Postgres and re-running `terraform apply`, Terraform itself errored with "Unexpected Identity Change" - a genuine provider-level state corruption caused by the earlier apply failing partway through, before Terraform finished writing that resource's tracking metadata. Fixed with `terraform state rm` (removes only Terraform's own bookkeeping, not the real Kubernetes resource) followed by `terraform import` (re-attaches tracking to the resource that was already running correctly in the cluster) - a real lesson that partial `apply` failures can corrupt Terraform's own state, independent of whether the underlying infrastructure is fine.
+
+### Task 19: Idempotency - full destroy/recreate
+
+- Ran `terraform destroy` (all 8 resources removed cleanly) followed by a fresh `terraform apply` from nothing but the `.tf` files. Proactively cleaned minikube's hostpath directories first, applying the Task 18 lesson rather than hoping for the best.
+- First `apply` after the fix succeeded cleanly with no manual intervention - direct proof the `chmod 700` fix was the real, complete root cause, not a one-off workaround.
+- Hit one more genuine, self-resolving race condition during recreation: the ingestor pod started crash-looping (schema didn't exist yet on the brand-new Postgres PVC) before the schema-creation command could run manually. Rather than intervene, let Kubernetes' crash-loop backoff run its course - the pod's next scheduled retry succeeded once the schema existed, self-healing without any manual pod deletion this time. Documented as expected, correct behavior of the retry/backoff model, not a bug.
+- Full pipeline reverified end-to-end post-recreation: ingestor batching cleanly at the same `oldest_lag~2.0s` baseline established back in Stage 2.
+
+### Task 20: Documentation
+
+- This DEVLOG entry, plus `terraform/` directory (provider.tf, postgres.tf, ingestion.tf, grafana.tf) committed alongside the Stage 4 `k8s/` manifests - both approaches (raw kubectl and Terraform) remain in the repo as a deliberate before/after comparison.
