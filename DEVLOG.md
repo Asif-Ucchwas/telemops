@@ -161,3 +161,47 @@
 ### Task 25: Final commit and release tag
 
 - Tagged v1.0 marking all 6 stages complete.
+
+## DevOps-Rigor Retrofit — Unit Testing & Coverage Snapshot (Bundle 5, Tasks 3-4)
+
+Added a pytest suite (`tests/test_decode.py`, 10 tests) targeting the pure
+decoding logic in `ingestion/ingest.py`. Extracted three functions
+(`decode_can_frame`, `should_flush`, `build_signal_rows`) into a new
+`ingestion/decode.py` module, since the original script connected to
+Postgres and a CAN interface at import time and wasn't testable as-is -
+same pattern as the ControlLoop-RT and CAN-Net retrofits in this bundle.
+
+Ran pytest-cov against `ingestion/`: `decode.py` at 100% (16/16
+statements, all 10 tests passing). Blended directory total: 10%
+(159 statements, 143 uncovered) - misleading without the breakdown below.
+
+**Unit-tested:**
+- `ingestion/decode.py` - 100% - the pure frame-decode, batching-trigger,
+  and row-flattening logic
+
+**Verified by other means, not unit-tested (4 files, 0% by design):**
+- `ingestion/ingest.py` - the live ingestion service; its pure logic now
+  lives in and is tested via decode.py, the remaining code is Postgres
+  connection handling and the CAN receive loop, verified via the
+  documented load test (10Hz->20,000Hz, ~9,700 frames/sec ceiling
+  root-caused to the single-threaded receive loop, per BENCHMARKS.md)
+- `ingestion/can_publisher.py` - the DBC-encoded signal simulator;
+  verified by producing the live traffic the whole pipeline was tested
+  against, not by unit tests
+- `ingestion/load_test.py` - the load-testing harness itself; verified by
+  its own documented results, not meta-tested
+- `ingestion/verify_data_flow.py` - a one-off manual verification script
+  (confirms the node actually writes into Postgres); by nature a live
+  integration check, not something to unit test
+
+**Bottom line:** the one file that's pure, deterministic logic
+(decode.py) is fully unit-tested. Everything else in ingestion/ is either
+live I/O (Postgres, CAN) verified through the repo's own load-testing and
+PVC-durability work, or a one-off verification/harness script whose
+correctness is inherently about live system behavior, not something a
+mocked unit test would meaningfully prove.
+
+Also created `requirements.txt` (python-can, cantools, psycopg2-binary)
+and `requirements-dev.txt` (pytest, pytest-cov, coverage) for this repo,
+neither of which existed before this retrofit - derived from actual
+imports in ingestion/*.py rather than assumed from the skills summary.

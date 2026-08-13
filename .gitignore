@@ -6,3 +6,6 @@ minikube
 terraform/.terraform/
 terraform/*.tfstate
 terraform/*.tfstate*
+.venv/
+.coverage
+.pytest_cache/

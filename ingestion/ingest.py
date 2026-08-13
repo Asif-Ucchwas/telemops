@@ -5,6 +5,8 @@ import psycopg2
 from psycopg2.extras import execute_values
 import time
 
+from decode import decode_can_frame, should_flush, build_signal_rows
+
 CHANNEL = "vcan0"
 BUSTYPE = "socketcan"
 DBC_PATH = "/app/vehicle.dbc"
@@ -40,10 +42,7 @@ def flush():
     )
     frame_ids = [row[0] for row in frame_rows]
 
-    signal_rows = []
-    for frame_id, signals in zip(frame_ids, signal_buffer):
-        for signal_name, value, unit in signals:
-            signal_rows.append((frame_id, signal_name, value, unit))
+    signal_rows = build_signal_rows(frame_ids, signal_buffer)
 
     if signal_rows:
         execute_values(
@@ -68,21 +67,14 @@ try:
             frame_buffer.append((msg.arbitration_id, bytes(msg.data)))
             receive_times.append(time.monotonic())
 
-            try:
-                decoded = db.decode_message(msg.arbitration_id, msg.data)
-                message_def = db.get_message_by_frame_id(msg.arbitration_id)
-                signals = [
-                    (name, float(value), message_def.get_signal_by_name(name).unit or None)
-                    for name, value in decoded.items()
-                ]
-            except (KeyError, ValueError) as e:
-                print(f"[ingest] could not decode id=0x{msg.arbitration_id:X}: {e}")
-                signals = []
+            signals = decode_can_frame(db, msg.arbitration_id, msg.data)
+            if not signals:
+                print(f"[ingest] could not decode id=0x{msg.arbitration_id:X}")
 
             signal_buffer.append(signals)
 
         now = time.monotonic()
-        if len(frame_buffer) >= BATCH_SIZE or (frame_buffer and now - last_flush >= FLUSH_INTERVAL):
+        if should_flush(len(frame_buffer), BATCH_SIZE, bool(frame_buffer), now - last_flush, FLUSH_INTERVAL):
             flush()
             last_flush = now
 
