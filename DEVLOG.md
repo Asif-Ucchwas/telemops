@@ -138,3 +138,26 @@
 ### Task 20: Documentation
 
 - This DEVLOG entry, plus `terraform/` directory (provider.tf, postgres.tf, ingestion.tf, grafana.tf) committed alongside the Stage 4 `k8s/` manifests - both approaches (raw kubectl and Terraform) remain in the repo as a deliberate before/after comparison.
+
+## Stage 6 — Packaging
+
+### Task 21: README
+
+- Wrote a top-level README.md: architecture overview, stage-by-stage summary table, quick-start instructions for both Docker Compose and Kubernetes/Terraform deployment paths, and a "notable engineering decisions" section highlighting the real, non-obvious problems solved (CDN workarounds, hostNetwork vs. Service DNS, proven persistence).
+
+### Task 22: Repo cleanup
+
+- Verified .gitignore correctly excludes large/environment-specific files (kubectl and minikube binaries that were accidentally downloaded into the repo directory, Terraform's .terraform/ provider cache and tfstate files).
+- Added a one-line clarifying note on the intentional dbc/vehicle.dbc + ingestion/vehicle.dbc duplication, so it reads as a deliberate Docker build-context constraint rather than an accidental leftover.
+
+### Task 23: Architecture diagram
+
+- Created docs/architecture.svg, a clean visual pipeline diagram (CAN publisher -> ingestor -> Postgres -> Grafana), embedded in the README.
+
+### Task 24: Documentation honesty check
+
+- Reviewed the whole project against the skill-honesty standard used throughout: only claim what was actually built and tested. This is a single-node minikube cluster, not multi-node production Kubernetes. The battery-temp alert threshold was deliberately widened for demo purposes and does not represent realistic vehicle telemetry ranges. Both are stated plainly in DEVLOG rather than glossed over.
+
+### Task 25: Final commit and release tag
+
+- Tagged v1.0 marking all 6 stages complete.
