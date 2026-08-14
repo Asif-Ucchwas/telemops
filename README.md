@@ -2,6 +2,9 @@
 
 **A reproducible container-to-cloud telemetry and monitoring pipeline for robotics systems — CAN bus signal simulation through to Kubernetes-orchestrated dashboards, built and verified end-to-end.**
 
+![banner](assets/banner-telemops.png)
+
+
 ![Python](https://img.shields.io/badge/Python-3.11-blue)
 ![Docker](https://img.shields.io/badge/Docker-Compose%20%2B%20K8s-2496ED)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-minikube-326CE5)
