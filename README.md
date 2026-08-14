@@ -86,6 +86,31 @@ Zero loss across three orders of magnitude of realistic-to-extreme load. The cei
 
 ![TelemOps alert rule](docs/screenshots/alert-battery-temp.png)
 
+## Testing & Build
+
+**Coverage:** 1 of 5 `ingestion/` files is unit-tested (pytest, 10
+tests) - `decode.py`, the pure frame-decode/batching/row-flattening
+logic extracted from `ingest.py`, at 100% line coverage. The other 4
+files are live Postgres/CAN I/O, verified via the load-testing and
+PVC-durability work below instead. Full honest breakdown in
+DEVLOG.md's DevOps-Rigor coverage snapshot entry.
+
+**Run tests:**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest tests/ -v --cov=ingestion --cov-report=term-missing
+```
+
+**CI:** no GitHub Actions workflow in this repo currently - CI was set
+up on CAN-Net as the DevOps-Rigor Task 12 proof of concept. Adding one
+here would follow the same pattern (see CAN-Net's
+`.github/workflows/tests.yml`).
+
+**Build clean:** `docker-compose up -d` (see Quick start below) builds
+the full stack from a fresh clone with no manual fixes required -
+verified as part of this repo's own Stage 1-6 work (see DEVLOG.md).
+
 ## Quick start
 
 ### Docker Compose
