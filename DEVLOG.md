@@ -205,3 +205,31 @@ Also created `requirements.txt` (python-can, cantools, psycopg2-binary)
 and `requirements-dev.txt` (pytest, pytest-cov, coverage) for this repo,
 neither of which existed before this retrofit - derived from actual
 imports in ingestion/*.py rather than assumed from the skills summary.
+
+## DevOps-Rigor Stage 3 — Production-Grade Practices (Tasks 9-11)
+
+Hardened ingestion/can_publisher.py, covering all three tasks:
+
+- Structured logging: replaced print() with Python's logging module,
+  LOG_LEVEL env var, timestamped output.
+- Error handling: the real brittle spot here was DBC_PATH -
+  cantools.database.load_file(DBC_PATH) ran at bare module import time
+  with zero error handling, so just importing this module with a wrong
+  path crashed immediately with a raw FileNotFoundError traceback,
+  before main() even ran. Wrapped it in load_dbc() with a clear error
+  message and exit(1). Also wrapped the bus.send() calls to log and
+  skip a bad send rather than crashing the loop.
+- Config externalization: CHANNEL, BUSTYPE, send interval, and
+  critically DBC_PATH (previously hardcoded to the Docker-only
+  "/app/vehicle.dbc", which doesn't exist outside the container) are
+  now CAN_CHANNEL/CAN_BUSTYPE/CAN_SEND_INTERVAL_S/DBC_PATH env vars.
+  Default DBC_PATH now resolves relative to the script's own location
+  (Path(__file__).resolve().parent / "vehicle.dbc"), which correctly
+  matches both the Docker layout (can_publisher.py and vehicle.dbc
+  copied to the same /app dir) and local dev, without requiring the
+  env var to be set at all in either case.
+
+Verified both paths live: default DBC_PATH correctly resolved
+ingestion/vehicle.dbc with zero configuration, and a genuinely wrong
+DBC_PATH failed cleanly (ERROR log with a concrete fix suggestion,
+exit code 1) instead of a raw traceback at import time.
